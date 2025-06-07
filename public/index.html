@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apex Bot Control</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 50px;
+            background-color: #f4f4f4;
+        }
+        h1, h2 { color: #333; }
+        button {
+            padding: 12px 24px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        #status { font-weight: bold; color: #555; }
+        #qrImage { max-width: 300px; margin-top: 20px; }
+        #pendingJobs { margin-top: 30px; max-width: 1000px; margin-left: auto; margin-right: auto; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+        }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        tr:hover { background-color: #f1f1f1; }
+        .confirm-btn {
+            background-color: #28a745;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+        .confirm-btn:hover { background-color: #218838; }
+        .no-jobs { text-align: center; color: #555; }
+    </style>
+</head>
+<body>
+    <h1>Apex Bot Control</h1>
+    <p>Status: <span id="status">Checking...</span></p>
+    <button id="startBtn" onclick="startBot()">Start Bot</button>
+    <button id="stopBtn" onclick="stopBot()">Stop Bot</button>
+    <button id="resetBtn" onclick="resetBot()">Reset Bot</button>
+    <button id="qrBtn" onclick="showQR()">Show QR</button>
+    <img id="qrImage" src="" alt="QR Code" style="display: none;">
+    
+    <h2>Pending Cash Payments</h2>
+    <div id="pendingJobs">
+        <table id="jobsTable">
+            <thead>
+                <tr>
+                    <th>Chat ID</th>
+                    <th>Total Cost (₦)</th>
+                    <th>Pages</th>
+                    <th>Copies</th>
+                    <th>Color</th>
+                    <th>Size</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="jobsBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        const apiBaseUrl = "http://localhost:3000";
+
+        async function updateStatus() {
+            console.log(`[${new Date().toISOString()}] Fetching status from ${apiBaseUrl}/status`);
+            try {
+                const res = await fetch(`${apiBaseUrl}/status`, {
+                    method: "GET",
+                    headers: { "Cache-Control": "no-cache" },
+                    signal: AbortSignal.timeout(5000)
+                });
+                if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
+                const data = await res.json();
+                console.log(`[${new Date().toISOString()}] Status response:`, data);
+                if (!data.status) throw new Error("Invalid status response");
+                const statusText = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+                document.getElementById("status").textContent = statusText;
+                document.getElementById("startBtn").disabled = data.status === "running";
+                document.getElementById("stopBtn").disabled = data.status === "stopped";
+                document.getElementById("resetBtn").disabled = false;
+                document.getElementById("qrBtn").disabled = data.status !== "running";
+            } catch (err) {
+                console.error(`[${new Date().toISOString()}] Status fetch error:`, err.message);
+                document.getElementById("status").textContent = `Error: ${err.message}`;
+                document.getElementById("startBtn").disabled = false;
+                document.getElementById("stopBtn").disabled = false;
+                document.getElementById("resetBtn").disabled = false;
+                document.getElementById("qrBtn").disabled = true;
+            }
+        }
+
+        async function startBot() {
+            console.log(`[${new Date().toISOString()}] Starting bot...`);
+            try {
+                const res = await fetch(`${apiBaseUrl}/start`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                });
+                if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
+                const data = await res.json();
+                console.log(`[${new Date().toISOString()}] Start response:`, data);
+                alert(data.message);
+                await updateStatus();
+            } catch (err) {
+                console.error(`[${new Date().toISOString()}] Start error:`, err.message);
+                alert(`Failed to start bot: ${err.message}. Check server.log for details.`);
+                await updateStatus();
+            }
+        }
+
+        async function stopBot() {
+            console.log(`[${new Date().toISOString()}] Stopping bot...`);
+            try {
+                const res = await fetch(`${apiBaseUrl}/stop`, { method: "POST" });
+                if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
+                const data = await res.json();
+                console.log(`[${new Date().toISOString()}] Stop response:`, data);
+                alert(data.message);
+                document.getElementById("qrImage").style.display = "none";
+                await updateStatus();
+            } catch (err) {
+                console.error(`[${new Date().toISOString()}] Stop error:`, err.message);
+                alert(`Failed to stop bot: ${err.message}`);
+                await updateStatus();
+            }
+        }
+
+        async function resetBot() {
+            console.log(`[${new Date().toISOString()}] Resetting bot...`);
+            if (!confirm("Resetting will close the bot and server. You may need to rerun apex-bot.bat. Continue?")) return;
+            try {
+                const res = await fetch(`${apiBaseUrl}/reset`, { method: "POST" });
+                if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
+                const data = await res.json();
+                console.log(`[${new Date().toISOString()}] Reset response:`, data);
+                alert(data.message);
+                document.getElementById("qrImage").style.display = "none";
+                await updateStatus();
+            } catch (err) {
+                console.error(`[${new Date().toISOString()}] Reset error:`, err.message);
+                // Handle expected server shutdown
+                if (err.message.includes("Failed to fetch")) {
+                    alert("Bot reset initiated. Server is shutting down. Please rerun apex-bot.bat to restart.");
+                } else {
+                    alert(`Reset failed: ${err.message}. Please rerun apex-bot.bat.`);
+                }
+                await updateStatus();
+            }
+        }
+
+        async function showQR() {
+            console.log(`[${new Date().toISOString()}] Fetching QR code...`);
+            try {
+                const res = await fetch(`${apiBaseUrl}/qr`);
+                if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
+                const data = await res.json();
+                console.log(`[${new Date().toISOString()}] QR response:`, data);
+                if (data.error) throw new Error(data.error);
+                const qrImage = document.getElementById("qrImage");
+                qrImage.src = data.qrImage;
+                qrImage.style.display = "block";
+            } catch (err) {
+                console.error(`[${new Date().toISOString()}] QR fetch error:`, err.message);
+                alert(`Failed to load QR code: ${err.message}`);
+            }
+        }
+
+        async function updatePendingJobs() {
+            console.log(`[${new Date().toISOString()}] Fetching pending jobs from ${apiBaseUrl}/pending-cash-jobs`);
+            try {
+                const res = await fetch(`${apiBaseUrl}/pending-cash-jobs`);
+                if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
+                const data = await res.json();
+                console.log(`[${new Date().toISOString()}] Pending jobs response:`, data);
+                const jobsBody = document.getElementById("jobsBody");
+                jobsBody.innerHTML = "";
+                if (!data.pendingJobs || data.pendingJobs.length === 0) {
+                    jobsBody.innerHTML = '<tr><td colspan="7" class="no-jobs">No pending cash payments.</td></tr>';
+                    return;
+                }
+                data.pendingJobs.forEach(job => {
+                    const row = document.createElement("tr");
+                    row.innerHTML = `
+                        <td>${job.chatId}</td>
+                        <td>₦${job.totalCost}</td>
+                        <td>${job.pages}</td>
+                        <td>${job.copies}</td>
+                        <td>${job.color}</td>
+                        <td>${job.size}</td>
+                        <td><button class="confirm-btn" onclick="confirmCashPayment('${job.chatId}')">Confirm Cash Payment</button></td>
+                    `;
+                    jobsBody.appendChild(row);
+                });
+            } catch (err) {
+                console.error(`[${new Date().toISOString()}] Pending jobs error:`, err.message);
+                document.getElementById("jobsBody").innerHTML = '<tr><td colspan="7" class="no-jobs">Error loading pending jobs.</td></tr>';
+            }
+        }
+
+        async function confirmCashPayment(chatId) {
+            console.log(`[${new Date().toISOString()}] Confirming cash payment for chatId: ${chatId}`);
+            if (!confirm(`Confirm cash payment for chat ID ${chatId}? Printing will start.`)) return;
+            try {
+                const res = await fetch(`${apiBaseUrl}/confirm-cash-payment`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ chatId })
+                });
+                if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
+                const data = await res.json();
+                console.log(`[${new Date().toISOString()}] Confirm payment response:`, data);
+                alert(data.message);
+                await updatePendingJobs();
+            } catch (err) {
+                console.error(`[${new Date().toISOString()}] Confirm payment error:`, err.message);
+                alert(`Failed to confirm payment: ${err.message}`);
+                await updatePendingJobs();
+            }
+        }
+
+        // Initial load
+        updateStatus();
+        updatePendingJobs();
+        setInterval(updateStatus, 5000);
+        setInterval(updatePendingJobs, 5000);
+    </script>
+</body>
+</html>

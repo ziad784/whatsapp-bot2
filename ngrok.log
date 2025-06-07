@@ -1,0 +1,3 @@
+[2025-05-28T20:09:14.643Z] Starting ngrok...
+[2025-05-28T20:09:15.851Z] ngrok URL: https://bb29-102-91-93-99.ngrok-free.app
+[2025-05-28T20:09:15.858Z] Updated .env with CALLBACK_URL: https://bb29-102-91-93-99.ngrok-free.app/callback
